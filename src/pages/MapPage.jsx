@@ -17,6 +17,7 @@ import {
   downloadAsset,
 } from "../components/Common.jsx";
 import MapPanel from "../components/MapPanel.jsx";
+import MapEquipmentPanel from "../components/MapEquipmentPanel.jsx";
 import SimulationMapManager from "../components/SimulationMapManager.jsx";
 import WaypointMissionPanel from "../WaypointMissionPanel.jsx";
 import {
@@ -42,6 +43,7 @@ import {
   recommendWaypointOrder,
   saveDemoDocument,
 } from "../demo/demoScenario.js";
+import { createEquipmentAt } from "../equipmentRoi.js";
 
 const PointCloudPanel = lazy(() => import("../components/PointCloudPanel.jsx"));
 
@@ -89,6 +91,13 @@ export default function MapPage({
   const [missionStatus, setMissionStatus] = useState(null);
   const [navigationStatus, setNavigationStatus] = useState(null);
   const [equipmentOptions, setEquipmentOptions] = useState([]);
+  const [equipment, setEquipment] = useState(() => (
+    demoMode ? loadDemoDocument().equipment : []
+  ));
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState(() => (
+    demoMode ? loadDemoDocument().equipment[0]?.id || null : null
+  ));
+  const [equipmentPointMode, setEquipmentPointMode] = useState(false);
   const [routeBusy, setRouteBusy] = useState(false);
   const [layers, setLayers] = useState({
     depth: true,
@@ -166,7 +175,17 @@ export default function MapPage({
   }, [activeWorldId, demoMode]);
 
   useEffect(() => {
-    if (demoMode) return undefined;
+    if (demoMode) {
+      const document = loadDemoDocument();
+      setEquipment(document.equipment);
+      setEquipmentOptions(document.equipment.filter((item) => item.enabled));
+      setSelectedEquipmentId((current) => (
+        document.equipment.some((item) => item.id === current)
+          ? current
+          : document.equipment[0]?.id || null
+      ));
+      return undefined;
+    }
     const controller = new AbortController();
     const loadEquipment = async () => {
       try {
@@ -226,6 +245,16 @@ export default function MapPage({
   }, [demoMode]);
 
   const selectGoal = (candidate) => {
+    if (equipmentPointMode) {
+      const next = createEquipmentAt(candidate, equipment.length);
+      setEquipment((current) => [...current, next]);
+      setSelectedEquipmentId(next.id);
+      setEquipmentPointMode(false);
+      setGoalMode(false);
+      setGoalCandidate(null);
+      notify("설비 중심을 지정했습니다. 범위를 조절한 뒤 저장하세요.", "info");
+      return;
+    }
     if (repositionWaypointId) {
       setWaypoints((current) => current.map((waypoint) => (
         waypoint.id === repositionWaypointId
@@ -278,6 +307,7 @@ export default function MapPage({
   };
 
   const beginReposition = (id) => {
+    setEquipmentPointMode(false);
     setSelectedWaypointId(id);
     setRepositionWaypointId(id);
     setGoalCandidate(null);
@@ -286,6 +316,7 @@ export default function MapPage({
   };
 
   const toggleWaypointMode = () => {
+    setEquipmentPointMode(false);
     if (mapDimension !== "2d") {
       setMapDimension("2d");
       setGoalMode(true);
@@ -455,6 +486,7 @@ export default function MapPage({
   const changeMapDimension = (dimension) => {
     setMapDimension(dimension);
     if (dimension !== "2d") {
+      setEquipmentPointMode(false);
       setGoalMode(false);
       setGoalCandidate(null);
       setRepositionWaypointId(null);
@@ -491,6 +523,9 @@ export default function MapPage({
             goalMode={goalMode}
             goalCandidate={goalCandidate}
             waypoints={waypoints}
+            equipment={equipment}
+            selectedEquipmentId={selectedEquipmentId}
+            onEquipmentSelect={setSelectedEquipmentId}
             selectedWaypointId={selectedWaypointId}
             onWaypointSelect={setSelectedWaypointId}
             onGoalCandidate={selectGoal}
@@ -515,6 +550,29 @@ export default function MapPage({
             busy={modeBusy}
             onChange={onModeChange}
             onInitializeLocalization={onInitializeLocalization}
+          />
+          <MapEquipmentPanel
+            equipment={equipment}
+            selectedId={selectedEquipmentId}
+            pointMode={equipmentPointMode}
+            onSelect={setSelectedEquipmentId}
+            onChange={setEquipment}
+            onStartPoint={() => {
+              setMapDimension("2d");
+              setEquipmentPointMode(true);
+              setGoalMode(true);
+              setGoalCandidate(null);
+              setRepositionWaypointId(null);
+              notify("2D 지도에서 설비 중심을 클릭하세요.", "info");
+            }}
+            onOpen3d={() => setMapDimension("3d")}
+            onSave={async (nextEquipment) => {
+              const current = loadDemoDocument();
+              saveDemoDocument({ ...current, equipment: nextEquipment });
+              setEquipmentOptions(nextEquipment.filter((item) => item.enabled));
+              notify("설비 위치와 ROI를 이 브라우저에 저장했습니다.");
+            }}
+            notify={notify}
           />
           <WaypointMissionPanel
             waypoints={waypoints}

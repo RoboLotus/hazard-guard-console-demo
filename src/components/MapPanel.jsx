@@ -31,6 +31,9 @@ function SpatialMapOverlay({
   waypoints = [],
   selectedWaypointId = null,
   onWaypointSelect,
+  equipment = [],
+  selectedEquipmentId = null,
+  onEquipmentSelect,
 }) {
   const pose = spatialState?.pose;
   const poseMatchesMap = pose?.available && matchesMapFrame(pose, mapSpec);
@@ -48,6 +51,19 @@ function SpatialMapOverlay({
   const waypointPoints = waypoints
     .map((waypoint) => ({ waypoint, point: mapToGrid(waypoint.x, waypoint.y, mapSpec) }))
     .filter((item) => item.point);
+  const equipmentAreas = equipment.map((item) => {
+    const first = mapToGrid(item.roi.min[0], item.roi.min[1], mapSpec);
+    const second = mapToGrid(item.roi.max[0], item.roi.max[1], mapSpec);
+    if (!first || !second) return null;
+    return {
+      item,
+      x: Math.min(first.x, second.x),
+      y: Math.min(first.y, second.y),
+      width: Math.abs(first.x - second.x),
+      height: Math.abs(first.y - second.y),
+      clipId: `equipment-roi-${String(item.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`,
+    };
+  }).filter(Boolean);
 
   return (
     <svg
@@ -64,6 +80,11 @@ function SpatialMapOverlay({
         <filter id="robot-shadow" x="-80%" y="-80%" width="260%" height="260%">
           <feDropShadow dx="0" dy="1" stdDeviation="1.2" floodColor="#173e68" floodOpacity=".35" />
         </filter>
+        {equipmentAreas.map(({ clipId, x, y, width, height }) => (
+          <clipPath id={clipId} key={clipId}>
+            <rect x={x + 0.5} y={y + 0.5} width={Math.max(width - 1, 0)} height={Math.max(height - 1, 0)} />
+          </clipPath>
+        ))}
       </defs>
 
       {layers.trail && trail.length > 1 && (
@@ -79,6 +100,32 @@ function SpatialMapOverlay({
           points={waypointPoints.map(({ point }) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ")}
         />
       )}
+
+      {equipmentAreas.map(({ item, x, y, width, height, clipId }) => (
+        <g
+          key={item.id}
+          className={`equipment-map-roi ${item.id === selectedEquipmentId ? "selected" : ""} ${item.enabled ? "enabled" : "disabled"}`}
+          role="button"
+          aria-label={`설비 ROI ${item.display_name}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onEquipmentSelect?.(item.id)}
+        >
+          <title>{item.display_name}</title>
+          <rect x={x} y={y} width={Math.max(width, 1)} height={Math.max(height, 1)} rx="1" />
+          {detail && (
+            <text
+              x={x + width / 2}
+              y={y + height / 2}
+              clipPath={`url(#${clipId})`}
+              textAnchor="middle"
+              dominantBaseline="central"
+              style={{ fontSize: `${Math.max(1.35, Math.min(2.4, height * 0.32, width / Math.max(item.display_name.length, 2)))}px` }}
+            >
+              {item.display_name}
+            </text>
+          )}
+        </g>
+      ))}
 
       {poseMatchesMap && sensors.map((sensor) => (
         layers[sensor.id] ? (
@@ -228,6 +275,9 @@ export default function MapPanel({
   waypoints = [],
   selectedWaypointId = null,
   onWaypointSelect,
+  equipment = [],
+  selectedEquipmentId = null,
+  onEquipmentSelect,
   waitingForMap = false,
   waitingLabel = "새 SLAM 지도 수신 대기 중",
   allowMockFallback = true,
@@ -416,6 +466,9 @@ export default function MapPanel({
                   waypoints={waypoints}
                   selectedWaypointId={selectedWaypointId}
                   onWaypointSelect={onWaypointSelect}
+                  equipment={equipment}
+                  selectedEquipmentId={selectedEquipmentId}
+                  onEquipmentSelect={onEquipmentSelect}
                 />
               </>
             )}
