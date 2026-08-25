@@ -541,6 +541,9 @@ export default function MapPage({
               archivedSession={selected3dSession}
               spatialState={spatialState}
               variant={mapDimension === "thermal" ? "thermal" : "rgb"}
+              staticCloudUrl={demoMode ? `${import.meta.env.BASE_URL}maps/real-factory/cloud.ply` : null}
+              equipment={equipment}
+              selectedEquipmentId={selectedEquipmentId}
             />
           </Suspense>
         )}

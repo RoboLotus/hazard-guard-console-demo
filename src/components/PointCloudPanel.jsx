@@ -117,11 +117,54 @@ function createRobotMarker() {
   };
 }
 
+function createEquipmentLabelSprite(item, selected) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 128;
+  const context = canvas.getContext("2d");
+  const label = String(item.display_name || item.id || "설비");
+  context.fillStyle = selected ? "rgba(154, 96, 13, .94)" : "rgba(18, 43, 62, .92)";
+  context.beginPath();
+  context.roundRect(4, 4, canvas.width - 8, canvas.height - 8, 24);
+  context.fill();
+  context.strokeStyle = selected ? "#ffd27a" : "#86c8ff";
+  context.lineWidth = 5;
+  context.stroke();
+  context.fillStyle = "#ffffff";
+  context.font = '800 46px "Pretendard Variable", Pretendard, sans-serif';
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(label, canvas.width / 2, canvas.height / 2, canvas.width - 48);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(material);
+  const width = Math.max(0.9, Math.min(2.4, 0.55 + label.length * 0.12));
+  sprite.scale.set(width, width / 4, 1);
+  sprite.center.set(0.5, 0);
+  sprite.renderOrder = 20;
+  return sprite;
+}
+
+function disposeObject3d(object) {
+  object.traverse((child) => {
+    child.geometry?.dispose();
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    materials.filter(Boolean).forEach((material) => {
+      material.map?.dispose();
+      material.dispose();
+    });
+  });
+}
+
 export default function PointCloudPanel({
   systemMode,
   archivedSession,
   spatialState,
   variant = "rgb",
+  staticCloudUrl = null,
+  equipment = [],
+  selectedEquipmentId = null,
 }) {
   const spec = VARIANTS[variant] || VARIANTS.rgb;
   const archived = spec.supportsArchive ? archivedSession : null;
@@ -177,6 +220,8 @@ export default function PointCloudPanel({
     scene.add(points);
     const robotMarker = createRobotMarker();
     scene.add(robotMarker.group);
+    const equipmentGroup = new THREE.Group();
+    scene.add(equipmentGroup);
     sceneRef.current = {
       camera,
       controls,
@@ -185,6 +230,7 @@ export default function PointCloudPanel({
       points,
       renderer,
       robotMarker,
+      equipmentGroup,
     };
     fitRef.current = () => fitCameraToCloud(camera, controls, geometry);
 
@@ -214,11 +260,49 @@ export default function PointCloudPanel({
       geometry.dispose();
       material.dispose();
       robotMarker.dispose();
+      disposeObject3d(equipmentGroup);
       renderer.dispose();
       renderer.domElement.remove();
       sceneRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const group = sceneRef.current?.equipmentGroup;
+    if (!group) return undefined;
+    const clear = () => {
+      while (group.children.length) {
+        const child = group.children[0];
+        group.remove(child);
+        disposeObject3d(child);
+      }
+    };
+    clear();
+    equipment.forEach((item) => {
+      const minimum = item.roi?.min;
+      const maximum = item.roi?.max;
+      if (!minimum || !maximum) return;
+      const size = maximum.map((value, axis) => Number(value) - Number(minimum[axis]));
+      if (size.some((value) => !Number.isFinite(value) || value <= 0)) return;
+      const center = maximum.map((value, axis) => (Number(value) + Number(minimum[axis])) / 2);
+      const selected = item.id === selectedEquipmentId;
+      const solid = new THREE.BoxGeometry(size[0], size[1], size[2]);
+      const edges = new THREE.EdgesGeometry(solid);
+      solid.dispose();
+      const material = new THREE.LineBasicMaterial({
+        color: selected ? 0xffc857 : item.enabled ? 0x56c596 : 0x8593a3,
+        transparent: true,
+        opacity: selected ? 1 : 0.72,
+      });
+      const box = new THREE.LineSegments(edges, material);
+      box.position.set(center[0], center[1], center[2]);
+      group.add(box);
+      const label = createEquipmentLabelSprite(item, selected);
+      label.position.set(center[0], center[1], Number(maximum[2]) + 0.12);
+      group.add(label);
+    });
+    return clear;
+  }, [equipment, selectedEquipmentId]);
 
   useEffect(() => {
     if (variant !== "thermal") return undefined;
@@ -235,7 +319,7 @@ export default function PointCloudPanel({
   }, [variant]);
 
   useEffect(() => {
-    if (archived) return undefined;
+    if (archived || staticCloudUrl) return undefined;
     let disposed = false;
     let socket;
     let reconnectTimer;
@@ -293,10 +377,10 @@ export default function PointCloudPanel({
       window.clearTimeout(reconnectTimer);
       socket?.close();
     };
-  }, [archived?.id, spec.socketPath]);
+  }, [archived?.id, spec.socketPath, staticCloudUrl]);
 
   useEffect(() => {
-    if (!archived) return undefined;
+    if (!archived && !staticCloudUrl) return undefined;
     const controller = new AbortController();
     const load = async () => {
       const currentScene = sceneRef.current;
@@ -308,7 +392,7 @@ export default function PointCloudPanel({
       });
       try {
         const response = await fetch(
-          `/api/v1/system/maps/${encodeURIComponent(archived.world_id)}/${encodeURIComponent(archived.id)}/cloud.ply`,
+          staticCloudUrl || `/api/v1/system/maps/${encodeURIComponent(archived.world_id)}/${encodeURIComponent(archived.id)}/cloud.ply`,
           { cache: "no-store", signal: controller.signal },
         );
         if (!response.ok) {
@@ -339,8 +423,8 @@ export default function PointCloudPanel({
           connection: "connected",
           pointCount: position.count,
           colorAvailable: Boolean(sourceColor),
-          frameId: archived.cloud_frame_id || archived.frame_id || null,
-          updatedAt: new Date(archived.updated_at || archived.created_at),
+          frameId: staticCloudUrl ? "map" : archived.cloud_frame_id || archived.frame_id || null,
+          updatedAt: staticCloudUrl ? new Date() : new Date(archived.updated_at || archived.created_at),
           error: null,
         });
       } catch (error) {
@@ -354,9 +438,12 @@ export default function PointCloudPanel({
     };
     void load();
     return () => controller.abort();
-  }, [archived?.id]);
+  }, [archived?.id, staticCloudUrl]);
 
-  const cloudPose = selectPointCloudPose(spatialState, status.frameId);
+  const selectedCloudPose = selectPointCloudPose(spatialState, status.frameId);
+  const cloudPose = staticCloudUrl && selectedCloudPose
+    ? { ...selectedCloudPose, updated_at: new Date(clockTick).toISOString() }
+    : selectedCloudPose;
   const robotState = resolvePointCloudRobotState(
     cloudPose,
     status.frameId,
@@ -387,7 +474,7 @@ export default function PointCloudPanel({
   );
   const rgbdMode = systemMode?.mode === "rgbd_mapping"
     || systemMode?.mapping_profile === "toolbox_rtabmap";
-  const connectionLabel = archived
+  const connectionLabel = archived || staticCloudUrl
     ? status.connection === "connected" && status.pointCount
       ? "저장된 3D 세션"
       : status.connection === "connecting" ? "저장 지도 변환 중" : "저장 지도 오류"
@@ -415,7 +502,7 @@ export default function PointCloudPanel({
       )} />
       <div className="point-cloud-stage">
         <div ref={mountRef} className="point-cloud-canvas" />
-        <div className={`map-live-badge ${status.connection === "connected" && status.pointCount && (archived || cloudFresh) ? "" : "mock"}`}>
+        <div className={`map-live-badge ${status.connection === "connected" && status.pointCount && (archived || staticCloudUrl || cloudFresh) ? "" : "mock"}`}>
           <span />{connectionLabel}
         </div>
         {Boolean(status.pointCount) && (
@@ -459,7 +546,9 @@ export default function PointCloudPanel({
           <span><i className="point-cloud-color-dot" />{status.colorAvailable ? "RGB 색상 포함" : "기본 색상"}</span>
         )}
         <span>
-          {archived
+          {staticCloudUrl
+            ? "정적 real_factory · map 좌표계"
+            : archived
             ? `저장 세션 · ${archived.name || archived.id}`
             : variant === "thermal"
             ? `열화상-Depth 투영 · ${status.frameId || "좌표계 미확인"} 좌표계 · 실시간`
