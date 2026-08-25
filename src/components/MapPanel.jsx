@@ -31,6 +31,9 @@ function SpatialMapOverlay({
   waypoints = [],
   selectedWaypointId = null,
   onWaypointSelect,
+  equipment = [],
+  selectedEquipmentId = null,
+  onEquipmentSelect,
 }) {
   const pose = spatialState?.pose;
   const poseMatchesMap = pose?.available && matchesMapFrame(pose, mapSpec);
@@ -48,6 +51,19 @@ function SpatialMapOverlay({
   const waypointPoints = waypoints
     .map((waypoint) => ({ waypoint, point: mapToGrid(waypoint.x, waypoint.y, mapSpec) }))
     .filter((item) => item.point);
+  const equipmentAreas = equipment.map((item) => {
+    const first = mapToGrid(item.roi.min[0], item.roi.min[1], mapSpec);
+    const second = mapToGrid(item.roi.max[0], item.roi.max[1], mapSpec);
+    if (!first || !second) return null;
+    return {
+      item,
+      x: Math.min(first.x, second.x),
+      y: Math.min(first.y, second.y),
+      width: Math.abs(first.x - second.x),
+      height: Math.abs(first.y - second.y),
+      clipId: `equipment-roi-${String(item.id).replace(/[^a-zA-Z0-9_-]/g, "-")}`,
+    };
+  }).filter(Boolean);
 
   return (
     <svg
@@ -64,6 +80,11 @@ function SpatialMapOverlay({
         <filter id="robot-shadow" x="-80%" y="-80%" width="260%" height="260%">
           <feDropShadow dx="0" dy="1" stdDeviation="1.2" floodColor="#173e68" floodOpacity=".35" />
         </filter>
+        {equipmentAreas.map(({ clipId, x, y, width, height }) => (
+          <clipPath id={clipId} key={clipId}>
+            <rect x={x + 0.5} y={y + 0.5} width={Math.max(width - 1, 0)} height={Math.max(height - 1, 0)} />
+          </clipPath>
+        ))}
       </defs>
 
       {layers.trail && trail.length > 1 && (
@@ -79,6 +100,32 @@ function SpatialMapOverlay({
           points={waypointPoints.map(({ point }) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ")}
         />
       )}
+
+      {equipmentAreas.map(({ item, x, y, width, height, clipId }) => (
+        <g
+          key={item.id}
+          className={`equipment-map-roi ${item.id === selectedEquipmentId ? "selected" : ""} ${item.enabled ? "enabled" : "disabled"}`}
+          role="button"
+          aria-label={`설비 ROI ${item.display_name}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onEquipmentSelect?.(item.id)}
+        >
+          <title>{item.display_name}</title>
+          <rect x={x} y={y} width={Math.max(width, 1)} height={Math.max(height, 1)} rx="1" />
+          {detail && (
+            <text
+              x={x + width / 2}
+              y={y + height / 2}
+              clipPath={`url(#${clipId})`}
+              textAnchor="middle"
+              dominantBaseline="central"
+              style={{ fontSize: `${Math.max(1.35, Math.min(2.4, height * 0.32, width / Math.max(item.display_name.length, 2)))}px` }}
+            >
+              {item.display_name}
+            </text>
+          )}
+        </g>
+      ))}
 
       {poseMatchesMap && sensors.map((sensor) => (
         layers[sensor.id] ? (
@@ -228,11 +275,15 @@ export default function MapPanel({
   waypoints = [],
   selectedWaypointId = null,
   onWaypointSelect,
+  equipment = [],
+  selectedEquipmentId = null,
+  onEquipmentSelect,
   waitingForMap = false,
   waitingLabel = "새 SLAM 지도 수신 대기 중",
   allowMockFallback = true,
 }) {
   const mapLive = Boolean(mediaStatus?.map?.available);
+  const staticMapSource = mediaStatus?.map?.static_url || null;
   const mapSpec = resolveMapSpec(mediaStatus, spatialState);
   const depthLegend = sensorLegend(spatialState, "depth");
   const thermalLegend = sensorLegend(spatialState, "thermal");
@@ -398,7 +449,15 @@ export default function MapPanel({
           >
             {(mapLive || allowMockFallback) && (
               <>
-                <LiveImage className={mapLive ? "live-map" : ""} draggable="false" endpoint="/api/v1/media/map" fallback={slamMap} enabled={mapLive} interval={1000} alt="ROS 2 SLAM 점유 지도" />
+                <LiveImage
+                  className={mapLive ? "live-map" : ""}
+                  draggable="false"
+                  endpoint="/api/v1/media/map"
+                  fallback={staticMapSource || slamMap}
+                  enabled={mapLive && !staticMapSource}
+                  interval={1000}
+                  alt="ROS 2 SLAM 점유 지도"
+                />
                 <SpatialMapOverlay
                   spatialState={spatialState}
                   mapSpec={mapSpec}
@@ -407,6 +466,9 @@ export default function MapPanel({
                   waypoints={waypoints}
                   selectedWaypointId={selectedWaypointId}
                   onWaypointSelect={onWaypointSelect}
+                  equipment={equipment}
+                  selectedEquipmentId={selectedEquipmentId}
+                  onEquipmentSelect={onEquipmentSelect}
                 />
               </>
             )}
@@ -428,7 +490,7 @@ export default function MapPanel({
             <small>{allowMockFallback ? "이전 세션 지도는 초기화되었습니다." : "센서와 ROS 2 브리지가 준비되면 자동으로 표시됩니다."}</small>
           </div>
         )}
-        <div className={`map-live-badge ${mapLive ? "" : "mock"}`}><span />{mapLive ? "SLAM · 공간 데이터 실시간" : waitingForMap ? "ROS 지도 대기" : "디지털 트윈 목업"}</div>
+        <div className={`map-live-badge ${mapLive ? "" : "mock"}`}><span />{staticMapSource ? "정적 real_factory" : mapLive ? "SLAM · 공간 데이터 실시간" : waitingForMap ? "ROS 지도 대기" : "디지털 트윈 목업"}</div>
         {allowMockFallback && spatialState?.heatmap?.simulated && layers.heatmap && <div className="heatmap-simulation-badge">SIMULATED HEAT</div>}
         {goalMode && <div className="goal-mode-hint">지도를 클릭해 목적지 후보를 선택하세요</div>}
         {detail && (
@@ -447,7 +509,7 @@ export default function MapPanel({
         {depthLegend && <span><i className="legend-depth" />{depthLegend}</span>}
         {thermalLegend && <span><i className="legend-thermal" />{thermalLegend}</span>}
         <span><i className="legend-heat" />열원</span>
-        <strong>{mapLive ? `ROS /map · ${Math.round(mapView.zoom * 100)}%` : allowMockFallback ? `목업 · ${Math.round(mapView.zoom * 100)}%` : `센서 대기 · ${Math.round(mapView.zoom * 100)}%`}</strong>
+        <strong>{staticMapSource ? `정적 지도 · ${Math.round(mapView.zoom * 100)}%` : mapLive ? `ROS /map · ${Math.round(mapView.zoom * 100)}%` : allowMockFallback ? `목업 · ${Math.round(mapView.zoom * 100)}%` : `센서 대기 · ${Math.round(mapView.zoom * 100)}%`}</strong>
       </footer>
     </section>
   );

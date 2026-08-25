@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   Camera,
   Cube,
@@ -17,6 +17,8 @@ import {
   downloadAsset,
 } from "../components/Common.jsx";
 import MapPanel from "../components/MapPanel.jsx";
+import MapEquipmentPanel from "../components/MapEquipmentPanel.jsx";
+import DemoStatePanel from "../components/DemoStatePanel.jsx";
 import SimulationMapManager from "../components/SimulationMapManager.jsx";
 import WaypointMissionPanel from "../WaypointMissionPanel.jsx";
 import {
@@ -37,6 +39,14 @@ import {
   buildPatrolSchedulePayload,
   normalizePatrolSchedule,
 } from "../patrolSchedule.js";
+import {
+  loadDemoDocument,
+  recommendWaypointOrder,
+  resetDemoDocument,
+  saveDemoDocument,
+} from "../demo/demoScenario.js";
+import { createEquipmentAt } from "../equipmentRoi.js";
+import { buildDemoHeatDetections } from "../thermalDemo.js";
 
 const PointCloudPanel = lazy(() => import("../components/PointCloudPanel.jsx"));
 
@@ -61,6 +71,7 @@ export default function MapPage({
   onSaveAndStop,
   onStopSystemMode,
   notify,
+  demoMode = false,
 }) {
   const [goalMode, setGoalMode] = useState(false);
   const [mapDimension, setMapDimension] = useState("2d");
@@ -68,7 +79,9 @@ export default function MapPage({
   const [goalCandidate, setGoalCandidate] = useState(null);
   const activeWorldId = systemMode?.active_world_id || "facility_map";
   const physicalTarget = systemMode?.deployment_target === "physical";
-  const initialRoute = loadWaypointRoute(activeWorldId);
+  const initialRoute = demoMode
+    ? loadDemoDocument()
+    : loadWaypointRoute(activeWorldId);
   const [waypoints, setWaypoints] = useState(() => initialRoute?.waypoints || []);
   const [patrolSchedule, setPatrolSchedule] = useState(
     () => normalizePatrolSchedule(initialRoute?.schedule),
@@ -81,6 +94,19 @@ export default function MapPage({
   const [missionStatus, setMissionStatus] = useState(null);
   const [navigationStatus, setNavigationStatus] = useState(null);
   const [equipmentOptions, setEquipmentOptions] = useState([]);
+  const [equipment, setEquipment] = useState(() => (
+    demoMode ? loadDemoDocument().equipment : []
+  ));
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState(() => (
+    demoMode ? loadDemoDocument().equipment[0]?.id || null : null
+  ));
+  const [equipmentPointMode, setEquipmentPointMode] = useState(false);
+  const [thermalPreset, setThermalPreset] = useState(() => (
+    demoMode ? loadDemoDocument().thermalPreset : "normal"
+  ));
+  const [demoSavedAt, setDemoSavedAt] = useState(() => (
+    demoMode ? loadDemoDocument().savedAt : null
+  ));
   const [routeBusy, setRouteBusy] = useState(false);
   const [layers, setLayers] = useState({
     depth: true,
@@ -102,7 +128,7 @@ export default function MapPage({
       : personSafetyName === "DISABLED" ? "" : "warning";
   const personSafetyLabel = personSafetyLabels[personSafetyName]
     || (physicalTarget ? "기능 대기" : "시뮬레이션 비활성");
-  const mapSpatialState = physicalTarget
+  const mappedSpatialState = physicalTarget
     ? {
         ...spatialState,
         pose: spatialState?.pose?.mock
@@ -114,6 +140,17 @@ export default function MapPage({
           : spatialState?.heatmap,
       }
     : spatialState;
+  const mapSpatialState = useMemo(() => (
+    demoMode
+      ? {
+          ...mappedSpatialState,
+          heatmap: {
+            ...mappedSpatialState.heatmap,
+            detections: buildDemoHeatDetections(equipment, thermalPreset),
+          },
+        }
+      : mappedSpatialState
+  ), [demoMode, equipment, mappedSpatialState, thermalPreset]);
   const mapSpec = resolveMapSpec(mediaStatus, mapSpatialState);
   const currentMapSignature = routeMapSignature(mapSpec);
   const mapMismatch = Boolean(
@@ -144,7 +181,9 @@ export default function MapPage({
   };
 
   useEffect(() => {
-    const route = loadWaypointRoute(activeWorldId);
+    const route = demoMode
+      ? loadDemoDocument()
+      : loadWaypointRoute(activeWorldId);
     setWaypoints(route?.waypoints || []);
     setPatrolSchedule(normalizePatrolSchedule(route?.schedule));
     setSavedMapSignature(route?.mapSignature || null);
@@ -153,9 +192,20 @@ export default function MapPage({
     setGoalCandidate(null);
     setGoalMode(false);
     setSelected3dSession(null);
-  }, [activeWorldId]);
+  }, [activeWorldId, demoMode]);
 
   useEffect(() => {
+    if (demoMode) {
+      const document = loadDemoDocument();
+      setEquipment(document.equipment);
+      setEquipmentOptions(document.equipment.filter((item) => item.enabled));
+      setSelectedEquipmentId((current) => (
+        document.equipment.some((item) => item.id === current)
+          ? current
+          : document.equipment[0]?.id || null
+      ));
+      return undefined;
+    }
     const controller = new AbortController();
     const loadEquipment = async () => {
       try {
@@ -174,9 +224,13 @@ export default function MapPage({
     };
     void loadEquipment();
     return () => controller.abort();
-  }, []);
+  }, [demoMode]);
 
   useEffect(() => {
+    if (demoMode) {
+      setNavigationStatus({ status: "mock" });
+      return undefined;
+    }
     let disposed = false;
     const refresh = async () => {
       try {
@@ -189,9 +243,13 @@ export default function MapPage({
     void refresh();
     const interval = window.setInterval(refresh, 750);
     return () => { disposed = true; window.clearInterval(interval); };
-  }, []);
+  }, [demoMode]);
 
   useEffect(() => {
+    if (demoMode) {
+      setMissionStatus({ status: "idle", message: "정적 데모" });
+      return undefined;
+    }
     let disposed = false;
     const refreshMission = async () => {
       try {
@@ -204,9 +262,19 @@ export default function MapPage({
     void refreshMission();
     const interval = window.setInterval(refreshMission, 750);
     return () => { disposed = true; window.clearInterval(interval); };
-  }, []);
+  }, [demoMode]);
 
   const selectGoal = (candidate) => {
+    if (equipmentPointMode) {
+      const next = createEquipmentAt(candidate, equipment.length);
+      setEquipment((current) => [...current, next]);
+      setSelectedEquipmentId(next.id);
+      setEquipmentPointMode(false);
+      setGoalMode(false);
+      setGoalCandidate(null);
+      notify("설비 중심을 지정했습니다. 범위를 조절한 뒤 저장하세요.", "info");
+      return;
+    }
     if (repositionWaypointId) {
       setWaypoints((current) => current.map((waypoint) => (
         waypoint.id === repositionWaypointId
@@ -259,6 +327,7 @@ export default function MapPage({
   };
 
   const beginReposition = (id) => {
+    setEquipmentPointMode(false);
     setSelectedWaypointId(id);
     setRepositionWaypointId(id);
     setGoalCandidate(null);
@@ -267,6 +336,7 @@ export default function MapPage({
   };
 
   const toggleWaypointMode = () => {
+    setEquipmentPointMode(false);
     if (mapDimension !== "2d") {
       setMapDimension("2d");
       setGoalMode(true);
@@ -282,6 +352,18 @@ export default function MapPage({
   };
 
   const persistRoute = () => {
+    if (demoMode) {
+      const current = loadDemoDocument();
+      const saved = saveDemoDocument({
+        ...current,
+        waypoints,
+        mapSignature: currentMapSignature,
+      });
+      setDemoSavedAt(saved.savedAt);
+      setSavedMapSignature(currentMapSignature);
+      notify("웨이포인트를 이 브라우저에 저장했습니다.");
+      return;
+    }
     saveWaypointRoute(
       waypoints,
       mapSpec,
@@ -300,13 +382,25 @@ export default function MapPage({
     setGoalMode(false);
     setRepositionWaypointId(null);
     setSavedMapSignature(null);
-    clearWaypointRoute(activeWorldId);
+    if (demoMode) {
+      const current = loadDemoDocument();
+      const saved = saveDemoDocument({ ...current, waypoints: [], mapSignature: currentMapSignature });
+      setDemoSavedAt(saved.savedAt);
+    } else {
+      clearWaypointRoute(activeWorldId);
+    }
     notify("모든 웨이포인트를 삭제했습니다.", "info");
   };
 
   const recommendRoute = async () => {
     const enabled = activeWaypoints(waypoints);
     if (enabled.length < 2) return;
+    if (demoMode) {
+      setWaypoints(recommendWaypointOrder(waypoints));
+      setSavedMapSignature(null);
+      notify("직선거리 기준으로 가까운 웨이포인트 순서를 추천했습니다.", "info");
+      return;
+    }
     setRouteBusy(true);
     try {
       const response = await fetch("/api/v1/navigation/route/recommend", {
@@ -345,6 +439,10 @@ export default function MapPage({
   const startRoute = async () => {
     const enabled = activeWaypoints(waypoints);
     if (!enabled.length) return;
+    if (demoMode) {
+      notify("DEMO MODE에서는 경로를 편집할 수 있지만 실제 순찰은 시작하지 않습니다.", "warning");
+      return;
+    }
     if (!patrolModeReady) {
       notify(
         patrolModeSelected
@@ -383,6 +481,10 @@ export default function MapPage({
   };
 
   const cancelRoute = async () => {
+    if (demoMode) {
+      notify("DEMO MODE에서는 실행 중인 순찰 임무가 없습니다.", "info");
+      return;
+    }
     try {
       const response = await fetch("/api/v1/navigation/route", { method: "DELETE" });
       const result = await response.json();
@@ -406,15 +508,46 @@ export default function MapPage({
   const changeMapDimension = (dimension) => {
     setMapDimension(dimension);
     if (dimension !== "2d") {
+      setEquipmentPointMode(false);
       setGoalMode(false);
       setGoalCandidate(null);
       setRepositionWaypointId(null);
     }
   };
 
+  const saveCompleteDemo = () => {
+    const saved = saveDemoDocument({
+      ...loadDemoDocument(),
+      waypoints,
+      equipment,
+      thermalPreset,
+      mapSignature: currentMapSignature,
+    });
+    setSavedMapSignature(currentMapSignature);
+    setDemoSavedAt(saved.savedAt);
+    setEquipmentOptions(equipment.filter((item) => item.enabled));
+    notify("현재 데모 편집 상태를 브라우저에 저장했습니다.");
+  };
+
+  const restoreDemoSamples = () => {
+    const restored = resetDemoDocument();
+    setWaypoints(restored.waypoints);
+    setEquipment(restored.equipment);
+    setEquipmentOptions(restored.equipment.filter((item) => item.enabled));
+    setSelectedWaypointId(null);
+    setSelectedEquipmentId(restored.equipment[0]?.id || null);
+    setGoalMode(false);
+    setEquipmentPointMode(false);
+    setGoalCandidate(null);
+    setThermalPreset(restored.thermalPreset);
+    setSavedMapSignature(null);
+    setDemoSavedAt(null);
+    notify("최초 데모 샘플을 복원했습니다.", "info");
+  };
+
   return (
     <div className="detail-page map-page">
-      <DetailHeading eyebrow="DIGITAL TWIN" title="지도 관제" description="2D 점유 지도, RTAB-Map RGB-D 컬러 포인트클라우드, 캘리브레이션으로 온도를 입힌 열화상 3D 지도를 전환해 확인합니다.">
+      <DetailHeading eyebrow="DIGITAL TWIN" title="지도 관제" description={demoMode ? "real_factory 공통 좌표로 만든 2D 지도와 정적 3D 점군에서 웨이포인트·설비 ROI·열화상 예시를 체험합니다." : "2D 점유 지도, RTAB-Map RGB-D 컬러 포인트클라우드, 캘리브레이션으로 온도를 입힌 열화상 3D 지도를 전환해 확인합니다."}>
         <div className="map-dimension-switch" aria-label="지도 표시 방식">
           <button type="button" className={mapDimension === "2d" ? "active" : ""} aria-pressed={mapDimension === "2d"} onClick={() => changeMapDimension("2d")}>
             <MapTrifold size={16} />2D 지도
@@ -427,7 +560,9 @@ export default function MapPage({
           </button>
         </div>
         <span className={`api-status ${mapLive ? "online" : ""}`}><span />{
-          physicalTarget
+          demoMode
+            ? "정적 real_factory 데모"
+            : physicalTarget
             ? mapLive ? "실물 로봇 지도 연결" : "실물 로봇 데이터 대기"
             : mapLive ? "공간 데이터 연결" : "디지털 트윈 목업"
         }</span>
@@ -442,6 +577,9 @@ export default function MapPage({
             goalMode={goalMode}
             goalCandidate={goalCandidate}
             waypoints={waypoints}
+            equipment={equipment}
+            selectedEquipmentId={selectedEquipmentId}
+            onEquipmentSelect={setSelectedEquipmentId}
             selectedWaypointId={selectedWaypointId}
             onWaypointSelect={setSelectedWaypointId}
             onGoalCandidate={selectGoal}
@@ -457,6 +595,15 @@ export default function MapPage({
               archivedSession={selected3dSession}
               spatialState={spatialState}
               variant={mapDimension === "thermal" ? "thermal" : "rgb"}
+              staticCloudUrl={demoMode ? `${import.meta.env.BASE_URL}maps/real-factory/cloud.ply` : null}
+              equipment={equipment}
+              selectedEquipmentId={selectedEquipmentId}
+              thermalPreset={thermalPreset}
+              onThermalPresetChange={(preset) => {
+                setThermalPreset(preset);
+                const saved = saveDemoDocument({ ...loadDemoDocument(), thermalPreset: preset });
+                setDemoSavedAt(saved.savedAt);
+              }}
             />
           </Suspense>
         )}
@@ -467,6 +614,37 @@ export default function MapPage({
             onChange={onModeChange}
             onInitializeLocalization={onInitializeLocalization}
           />
+          <MapEquipmentPanel
+            equipment={equipment}
+            selectedId={selectedEquipmentId}
+            pointMode={equipmentPointMode}
+            onSelect={setSelectedEquipmentId}
+            onChange={setEquipment}
+            onStartPoint={() => {
+              setMapDimension("2d");
+              setEquipmentPointMode(true);
+              setGoalMode(true);
+              setGoalCandidate(null);
+              setRepositionWaypointId(null);
+              notify("2D 지도에서 설비 중심을 클릭하세요.", "info");
+            }}
+            onOpen3d={() => setMapDimension("3d")}
+            onSave={async (nextEquipment) => {
+              const current = loadDemoDocument();
+              const saved = saveDemoDocument({ ...current, equipment: nextEquipment });
+              setDemoSavedAt(saved.savedAt);
+              setEquipmentOptions(nextEquipment.filter((item) => item.enabled));
+              notify("설비 위치와 ROI를 이 브라우저에 저장했습니다.");
+            }}
+            notify={notify}
+          />
+          {demoMode && (
+            <DemoStatePanel
+              savedAt={demoSavedAt}
+              onSave={saveCompleteDemo}
+              onReset={restoreDemoSamples}
+            />
+          )}
           <WaypointMissionPanel
             waypoints={waypoints}
             equipmentOptions={equipmentOptions}

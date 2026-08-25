@@ -112,6 +112,7 @@ export default function HelpPage({ onNavigate }) {
       <div className="help-layout">
         <nav className="help-toc" aria-label="도움말 목차">
           <strong><BookOpenText size={17} weight="fill" />이 페이지에서</strong>
+          <a href="#static-demo">정적 데모 사용법</a>
           <a href="#screens">화면 구성</a>
           <a href="#mapping">새 지도 만들기</a>
           <a href="#patrol">웨이포인트 순찰</a>
@@ -124,6 +125,21 @@ export default function HelpPage({ onNavigate }) {
         </nav>
 
         <div className="help-content">
+          <HelpSection id="static-demo" icon={Cube} eyebrow="DEMO · LOCAL ONLY" title="정적 데모에서 지도 기능 체험하기">
+            <StepList>
+              <li><strong>지도</strong> 탭에서 `real_factory` 2D 지도를 확대·축소하거나 드래그합니다.</li>
+              <li><strong>지도에서 웨이포인트 추가</strong>를 누르고 위치를 선택한 뒤 이름, 방향과 정지 시간을 편집합니다.</li>
+              <li><strong>2D 위치 추가</strong>로 설비 중심을 지정하고 X/Y/Z 범위를 −/+ 버튼으로 조절합니다. 서로 겹치거나 3cm보다 가까운 ROI는 저장할 수 없습니다.</li>
+              <li><strong>3D RGB-D</strong>에서 점군을 회전·이동·확대하고 설비 이름과 ROI 박스를 확인합니다.</li>
+              <li><strong>3D 열화상</strong>에서 정상·주의·위험 예시를 직접 선택해 온도 색상 변화를 확인합니다.</li>
+              <li><strong>전체 저장</strong>은 현재 브라우저에만 기록하며, <strong>샘플 복원</strong>으로 최초 상태로 돌아갑니다.</li>
+            </StepList>
+            <div className="help-callout warning">
+              <WarningCircle size={20} weight="fill" />
+              <div><strong>정적 지도와 열화상은 기능 설명용입니다.</strong><p>3D 점군은 2D 점유 지도를 입체화한 샘플이며 실제 RGB-D·열화상 센서 측정값이 아닙니다. 버튼을 눌러도 로봇이나 Jetson에는 명령을 보내지 않습니다.</p></div>
+            </div>
+          </HelpSection>
+
           <HelpSection id="screens" icon={Binoculars} eyebrow="01 · NAVIGATION" title="화면 구성">
             <div className="help-screen-grid">
               {screenGuides.map(([name, description]) => (
@@ -147,6 +163,7 @@ export default function HelpPage({ onNavigate }) {
               <li>2D 작성이 끝나면 <strong>현재 2D SLAM 지도 저장</strong> 또는 <strong>지도 저장 후 종료</strong>를 누르고 저장 결과를 순찰 지도로 지정합니다.</li>
               <li><strong>2단계 · RGB-D 3D 수집</strong>을 선택하고 같은 공간을 한 번 더 주행합니다. 이 단계는 저장된 2D 지도에서 AMCL·Nav2로 위치를 추정합니다.</li>
               <li>수집이 끝나면 <strong>3D 수집 종료 및 DB 저장</strong>을 눌러 RTAB-Map DB를 안전하게 닫습니다.</li>
+              <li>저장 PLY가 준비되면 해당 세션을 <strong>순찰 지도</strong>로 지정하고 순찰 모드로 전환합니다. 이후 <strong>지도 설비 등록</strong>에서 2D 중심을 추가하고 3D ROI 박스를 확인합니다.</li>
             </StepList>
             <div className="help-callout info">
               <Keyboard size={20} weight="fill" />
@@ -207,6 +224,10 @@ export default function HelpPage({ onNavigate }) {
               <Archive size={20} weight="fill" />
               <div><strong>세션은 환경별로 계속 누적됩니다.</strong><p>보관은 목록 정리 기능이며 지도·DB·PLY 파일을 삭제하지 않습니다. 저장 공간 정리는 관리자와 합의한 뒤 별도로 수행해야 합니다.</p></div>
             </div>
+            <div className="help-callout neutral">
+              <FloppyDisk size={20} weight="fill" />
+              <div><strong>설비와 경로는 현재 지도 세션에 귀속됩니다.</strong><p>실제 운용에서는 브라우저가 아니라 Jetson의 지도 세션 폴더에 저장됩니다. 새 2D 지도를 만들거나 순찰 지도를 변경하면 이전 지도의 설비는 비활성화되며, 새 지도에서 위치와 ROI를 다시 등록해야 합니다. 정적 데모의 편집값은 현재 브라우저에만 저장됩니다.</p></div>
+            </div>
           </HelpSection>
 
           <HelpSection id="digital-twin" icon={Cube} eyebrow="05 · DIGITAL TWIN" title="2D·3D 지도와 센서 정보 보기">
@@ -234,7 +255,8 @@ export default function HelpPage({ onNavigate }) {
 
           <HelpSection id="monitoring" icon={Camera} eyebrow="06 · MONITORING" title="영상·이벤트·임계값 사용하기">
             <div className="help-feature-list">
-              <div><Camera size={19} /><span><strong>영상</strong><p>RGB와 열화상 스트림을 확인합니다. MOCK 표시는 실제 센서 영상이 아니라는 뜻입니다.</p></span></div>
+              <div><Camera size={19} /><span><strong>영상</strong><p>RGB와 열화상 스트림을 확인합니다. 실제 Console은 센서 미연결 시 Overview·영상·이벤트 상세에 정적 예시 사진 대신 연결 안내를 표시합니다. 정적 데모의 MOCK 영상은 UI 체험용입니다.</p></span></div>
+              <div><Gauge size={19} /><span><strong>구동 배터리</strong><p>실제 Console의 Overview 잔량은 Yahboom 제어보드 전압을 기준으로 환산한 운용 참고값이며 원본 전압을 함께 표시합니다. 배터리 데이터가 5초 이상 수신되지 않으면 수치 대신 데이터 없음으로 표시됩니다.</p></span></div>
               <div><ListChecks size={19} /><span><strong>이벤트</strong><p>위험 온도와 기타 이상 이벤트를 확인하고 처리 중·해결 상태로 변경합니다.</p></span></div>
               <div><SlidersHorizontal size={19} /><span><strong>설정·센서 진단</strong><p>이상 탐지 설정에서 설비별 고정·자동 가변 판정, ROI와 기준선을 관리하고, 연결 상태 점검에서 토픽 주기와 TF를 확인합니다.</p></span></div>
               <div><FloppyDisk size={19} /><span><strong>리포트</strong><p>순찰 중 자동 수집한 Jetson 및 ROS 프로세스 성능 통계를 조회하고, 이름 변경·CSV 저장·삭제를 수행합니다.</p></span></div>
@@ -270,8 +292,12 @@ export default function HelpPage({ onNavigate }) {
           <HelpSection id="troubleshooting" icon={WarningCircle} eyebrow="09 · TROUBLESHOOTING" title="문제가 생겼을 때">
             <div className="help-faq-list">
               <details>
-                <summary>지도가 목업 이미지로만 보입니다.</summary>
-                <p>맵 생성 또는 순찰 모드가 실행 중인지 확인하고, 지도 상단의 데이터 상태가 ROS /map인지 확인합니다. 서버 연결이 끊겼다면 백엔드와 ROS 브리지를 다시 확인하세요.</p>
+                <summary>실제 Console에서 지도 연결 필요 화면이 표시됩니다.</summary>
+                <p>실제 Console은 정적 목업 지도를 표시하지 않습니다. 맵 생성 또는 순찰 모드가 실행 중인지 확인하고, 지도 상단의 데이터 상태가 ROS /map인지 확인합니다. 계속 연결 필요 상태라면 백엔드와 ROS 브리지를 다시 확인하세요. 현재 정적 데모의 real_factory 지도는 기능 체험용입니다.</p>
+              </details>
+              <details>
+                <summary>Overview 배터리가 데이터 없음으로 표시됩니다.</summary>
+                <p>Robot의 Yahboom <code>/voltage</code> 토픽과 <code>/hazard_guard/battery</code> 변환 노드, FastAPI ROS 브리지를 순서대로 확인합니다. 마지막 배터리 메시지 이후 5초가 지나면 이전 수치를 유지하지 않고 데이터 없음으로 전환됩니다.</p>
               </details>
               <details>
                 <summary>가상 조작기 버튼이 비활성화되어 있습니다.</summary>

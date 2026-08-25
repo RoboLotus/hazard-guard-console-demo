@@ -1,0 +1,28 @@
+{
+  "id": "static-real-factory-v1",
+  "world_id": "real_factory",
+  "frame_id": "map",
+  "source": "RoboLotus/Simulation_env: gazebo/maps/real_factory.pgm",
+  "width": 1216,
+  "height": 716,
+  "resolution": 0.05,
+  "origin": [
+    -30.4,
+    -17.9,
+    0
+  ],
+  "bounds": {
+    "min": [
+      -30.4,
+      -17.9,
+      0
+    ],
+    "max": [
+      30.400000000000006,
+      17.900000000000006,
+      1.8
+    ]
+  },
+  "point_count": 128659,
+  "generated": true
+}
