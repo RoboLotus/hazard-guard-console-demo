@@ -1,5 +1,7 @@
 import { fallbackSpatialState } from "../spatial.js";
 
+const baseUrl = import.meta.env?.BASE_URL || "/";
+
 export const DEMO_STORAGE_VERSION = 1;
 export const DEMO_STORAGE_KEY = "hazard-guard:static-demo:v1";
 export const DEMO_WORLD_ID = "real_factory";
@@ -34,7 +36,7 @@ export const demoMediaStatus = Object.freeze({
   map: {
     available: true,
     source: "demo:real-factory",
-    static_url: `${import.meta.env.BASE_URL}maps/real-factory/map.png`,
+    static_url: `${baseUrl}maps/real-factory/map.png`,
     width: demoMapSpec.width,
     height: demoMapSpec.height,
     metadata: demoMapSpec,
