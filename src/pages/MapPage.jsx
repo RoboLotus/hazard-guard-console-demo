@@ -547,7 +547,7 @@ export default function MapPage({
 
   return (
     <div className="detail-page map-page">
-      <DetailHeading eyebrow="DIGITAL TWIN" title="지도 관제" description="2D 점유 지도, RTAB-Map RGB-D 컬러 포인트클라우드, 캘리브레이션으로 온도를 입힌 열화상 3D 지도를 전환해 확인합니다.">
+      <DetailHeading eyebrow="DIGITAL TWIN" title="지도 관제" description={demoMode ? "real_factory 공통 좌표로 만든 2D 지도와 정적 3D 점군에서 웨이포인트·설비 ROI·열화상 예시를 체험합니다." : "2D 점유 지도, RTAB-Map RGB-D 컬러 포인트클라우드, 캘리브레이션으로 온도를 입힌 열화상 3D 지도를 전환해 확인합니다."}>
         <div className="map-dimension-switch" aria-label="지도 표시 방식">
           <button type="button" className={mapDimension === "2d" ? "active" : ""} aria-pressed={mapDimension === "2d"} onClick={() => changeMapDimension("2d")}>
             <MapTrifold size={16} />2D 지도
@@ -560,7 +560,9 @@ export default function MapPage({
           </button>
         </div>
         <span className={`api-status ${mapLive ? "online" : ""}`}><span />{
-          physicalTarget
+          demoMode
+            ? "정적 real_factory 데모"
+            : physicalTarget
             ? mapLive ? "실물 로봇 지도 연결" : "실물 로봇 데이터 대기"
             : mapLive ? "공간 데이터 연결" : "디지털 트윈 목업"
         }</span>

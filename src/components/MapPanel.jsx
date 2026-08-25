@@ -490,7 +490,7 @@ export default function MapPanel({
             <small>{allowMockFallback ? "이전 세션 지도는 초기화되었습니다." : "센서와 ROS 2 브리지가 준비되면 자동으로 표시됩니다."}</small>
           </div>
         )}
-        <div className={`map-live-badge ${mapLive ? "" : "mock"}`}><span />{mapLive ? "SLAM · 공간 데이터 실시간" : waitingForMap ? "ROS 지도 대기" : "디지털 트윈 목업"}</div>
+        <div className={`map-live-badge ${mapLive ? "" : "mock"}`}><span />{staticMapSource ? "정적 real_factory" : mapLive ? "SLAM · 공간 데이터 실시간" : waitingForMap ? "ROS 지도 대기" : "디지털 트윈 목업"}</div>
         {allowMockFallback && spatialState?.heatmap?.simulated && layers.heatmap && <div className="heatmap-simulation-badge">SIMULATED HEAT</div>}
         {goalMode && <div className="goal-mode-hint">지도를 클릭해 목적지 후보를 선택하세요</div>}
         {detail && (
@@ -509,7 +509,7 @@ export default function MapPanel({
         {depthLegend && <span><i className="legend-depth" />{depthLegend}</span>}
         {thermalLegend && <span><i className="legend-thermal" />{thermalLegend}</span>}
         <span><i className="legend-heat" />열원</span>
-        <strong>{mapLive ? `ROS /map · ${Math.round(mapView.zoom * 100)}%` : allowMockFallback ? `목업 · ${Math.round(mapView.zoom * 100)}%` : `센서 대기 · ${Math.round(mapView.zoom * 100)}%`}</strong>
+        <strong>{staticMapSource ? `정적 지도 · ${Math.round(mapView.zoom * 100)}%` : mapLive ? `ROS /map · ${Math.round(mapView.zoom * 100)}%` : allowMockFallback ? `목업 · ${Math.round(mapView.zoom * 100)}%` : `센서 대기 · ${Math.round(mapView.zoom * 100)}%`}</strong>
       </footer>
     </section>
   );

@@ -112,6 +112,7 @@ export default function HelpPage({ onNavigate }) {
       <div className="help-layout">
         <nav className="help-toc" aria-label="도움말 목차">
           <strong><BookOpenText size={17} weight="fill" />이 페이지에서</strong>
+          <a href="#static-demo">정적 데모 사용법</a>
           <a href="#screens">화면 구성</a>
           <a href="#mapping">새 지도 만들기</a>
           <a href="#patrol">웨이포인트 순찰</a>
@@ -124,6 +125,21 @@ export default function HelpPage({ onNavigate }) {
         </nav>
 
         <div className="help-content">
+          <HelpSection id="static-demo" icon={Cube} eyebrow="DEMO · LOCAL ONLY" title="정적 데모에서 지도 기능 체험하기">
+            <StepList>
+              <li><strong>지도</strong> 탭에서 `real_factory` 2D 지도를 확대·축소하거나 드래그합니다.</li>
+              <li><strong>지도에서 웨이포인트 추가</strong>를 누르고 위치를 선택한 뒤 이름, 방향과 정지 시간을 편집합니다.</li>
+              <li><strong>2D 위치 추가</strong>로 설비 중심을 지정하고 X/Y/Z 범위를 −/+ 버튼으로 조절합니다. 서로 겹치거나 3cm보다 가까운 ROI는 저장할 수 없습니다.</li>
+              <li><strong>3D RGB-D</strong>에서 점군을 회전·이동·확대하고 설비 이름과 ROI 박스를 확인합니다.</li>
+              <li><strong>3D 열화상</strong>에서 정상·주의·위험 예시를 직접 선택해 온도 색상 변화를 확인합니다.</li>
+              <li><strong>전체 저장</strong>은 현재 브라우저에만 기록하며, <strong>샘플 복원</strong>으로 최초 상태로 돌아갑니다.</li>
+            </StepList>
+            <div className="help-callout warning">
+              <WarningCircle size={20} weight="fill" />
+              <div><strong>정적 지도와 열화상은 기능 설명용입니다.</strong><p>3D 점군은 2D 점유 지도를 입체화한 샘플이며 실제 RGB-D·열화상 센서 측정값이 아닙니다. 버튼을 눌러도 로봇이나 Jetson에는 명령을 보내지 않습니다.</p></div>
+            </div>
+          </HelpSection>
+
           <HelpSection id="screens" icon={Binoculars} eyebrow="01 · NAVIGATION" title="화면 구성">
             <div className="help-screen-grid">
               {screenGuides.map(([name, description]) => (
