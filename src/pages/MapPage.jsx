@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   Camera,
   Cube,
@@ -44,6 +44,7 @@ import {
   saveDemoDocument,
 } from "../demo/demoScenario.js";
 import { createEquipmentAt } from "../equipmentRoi.js";
+import { buildDemoHeatDetections } from "../thermalDemo.js";
 
 const PointCloudPanel = lazy(() => import("../components/PointCloudPanel.jsx"));
 
@@ -98,6 +99,9 @@ export default function MapPage({
     demoMode ? loadDemoDocument().equipment[0]?.id || null : null
   ));
   const [equipmentPointMode, setEquipmentPointMode] = useState(false);
+  const [thermalPreset, setThermalPreset] = useState(() => (
+    demoMode ? loadDemoDocument().thermalPreset : "normal"
+  ));
   const [routeBusy, setRouteBusy] = useState(false);
   const [layers, setLayers] = useState({
     depth: true,
@@ -119,7 +123,7 @@ export default function MapPage({
       : personSafetyName === "DISABLED" ? "" : "warning";
   const personSafetyLabel = personSafetyLabels[personSafetyName]
     || (physicalTarget ? "기능 대기" : "시뮬레이션 비활성");
-  const mapSpatialState = physicalTarget
+  const mappedSpatialState = physicalTarget
     ? {
         ...spatialState,
         pose: spatialState?.pose?.mock
@@ -131,6 +135,17 @@ export default function MapPage({
           : spatialState?.heatmap,
       }
     : spatialState;
+  const mapSpatialState = useMemo(() => (
+    demoMode
+      ? {
+          ...mappedSpatialState,
+          heatmap: {
+            ...mappedSpatialState.heatmap,
+            detections: buildDemoHeatDetections(equipment, thermalPreset),
+          },
+        }
+      : mappedSpatialState
+  ), [demoMode, equipment, mappedSpatialState, thermalPreset]);
   const mapSpec = resolveMapSpec(mediaStatus, mapSpatialState);
   const currentMapSignature = routeMapSignature(mapSpec);
   const mapMismatch = Boolean(
@@ -544,6 +559,8 @@ export default function MapPage({
               staticCloudUrl={demoMode ? `${import.meta.env.BASE_URL}maps/real-factory/cloud.ply` : null}
               equipment={equipment}
               selectedEquipmentId={selectedEquipmentId}
+              thermalPreset={thermalPreset}
+              onThermalPresetChange={setThermalPreset}
             />
           </Suspense>
         )}

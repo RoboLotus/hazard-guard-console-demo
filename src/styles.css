@@ -1144,3 +1144,6 @@ body { margin: 0; min-width: 1100px; min-height: 100vh; background: #eef2f6; -we
 .equipment-map-roi.disabled rect { fill: rgba(112,126,141,.06); stroke: #8493a3; }
 .equipment-map-roi.selected rect { fill: rgba(244,170,55,.15); stroke: #e39926; stroke-width: 1.2; }
 .equipment-map-roi text { fill: #23587e; paint-order: stroke; stroke: rgba(255,255,255,.92); stroke-width: .8px; font-weight: 800; pointer-events: none; }
+.thermal-demo-presets { display: flex; padding: 2px; gap: 2px; background: #edf1f5; border: 1px solid #d9e1e8; border-radius: 7px; }
+.thermal-demo-presets button { min-width: 34px; padding: 4px 7px; color: #67798b; background: transparent; border: 0; border-radius: 5px; font-size: 8px; font-weight: 800; cursor: pointer; }
+.thermal-demo-presets button.active { color: #fff; background: #d65a34; box-shadow: 0 1px 3px rgba(104,44,26,.24); }

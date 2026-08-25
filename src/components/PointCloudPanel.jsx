@@ -9,6 +9,10 @@ import {
   resolvePointCloudRobotState,
   selectPointCloudPose,
 } from "../pointCloudRobot.js";
+import {
+  buildThermalColorArray,
+  thermalDemoPresets,
+} from "../thermalDemo.js";
 
 const INITIAL_STATUS = {
   connection: "connecting",
@@ -165,6 +169,8 @@ export default function PointCloudPanel({
   staticCloudUrl = null,
   equipment = [],
   selectedEquipmentId = null,
+  thermalPreset = "normal",
+  onThermalPresetChange,
 }) {
   const spec = VARIANTS[variant] || VARIANTS.rgb;
   const archived = spec.supportsArchive ? archivedSession : null;
@@ -231,6 +237,7 @@ export default function PointCloudPanel({
       renderer,
       robotMarker,
       equipmentGroup,
+      sourceColor: null,
     };
     fitRef.current = () => fitCameraToCloud(camera, controls, geometry);
 
@@ -305,7 +312,27 @@ export default function PointCloudPanel({
   }, [equipment, selectedEquipmentId]);
 
   useEffect(() => {
+    const scene = sceneRef.current;
+    const positions = scene?.geometry.getAttribute("position");
+    if (!scene || !positions) return;
+    if (variant === "thermal" && staticCloudUrl) {
+      scene.geometry.setAttribute(
+        "color",
+        new THREE.BufferAttribute(buildThermalColorArray(positions, equipment, thermalPreset), 3),
+      );
+      setTemperatureWindow([20, thermalDemoPresets[thermalPreset]?.peak || 46]);
+    } else if (scene.sourceColor) {
+      scene.geometry.setAttribute("color", scene.sourceColor.clone());
+    }
+    scene.geometry.attributes.color.needsUpdate = true;
+  }, [equipment, staticCloudUrl, thermalPreset, variant]);
+
+  useEffect(() => {
     if (variant !== "thermal") return undefined;
+    if (staticCloudUrl) {
+      setTemperatureWindow([20, thermalDemoPresets[thermalPreset]?.peak || 46]);
+      return undefined;
+    }
     let disposed = false;
     fetch("/api/v1/spatial/cloud/thermal/status", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
@@ -316,7 +343,7 @@ export default function PointCloudPanel({
       })
       .catch(() => {});
     return () => { disposed = true; };
-  }, [variant]);
+  }, [staticCloudUrl, thermalPreset, variant]);
 
   useEffect(() => {
     if (archived || staticCloudUrl) return undefined;
@@ -408,12 +435,20 @@ export default function PointCloudPanel({
         const sourceColor = source.getAttribute("color");
         if (sourceColor) {
           scene.geometry.setAttribute("color", sourceColor.clone());
+          scene.sourceColor = sourceColor.clone();
         } else {
           const colors = new Float32Array(position.count * 3);
           for (let index = 0; index < position.count; index += 1) {
             colors.set([0.3, 0.57, 0.86], index * 3);
           }
           scene.geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+          scene.sourceColor = new THREE.BufferAttribute(colors.slice(), 3);
+        }
+        if (variant === "thermal" && staticCloudUrl) {
+          scene.geometry.setAttribute(
+            "color",
+            new THREE.BufferAttribute(buildThermalColorArray(position, equipment, thermalPreset), 3),
+          );
         }
         scene.geometry.computeBoundingSphere();
         source.dispose();
@@ -438,7 +473,7 @@ export default function PointCloudPanel({
     };
     void load();
     return () => controller.abort();
-  }, [archived?.id, staticCloudUrl]);
+  }, [archived?.id, equipment, staticCloudUrl, thermalPreset, variant]);
 
   const selectedCloudPose = selectPointCloudPose(spatialState, status.frameId);
   const cloudPose = staticCloudUrl && selectedCloudPose
@@ -494,6 +529,13 @@ export default function PointCloudPanel({
     <section className="panel map-panel map-panel-detail point-cloud-panel">
       <PanelHeader eyebrow={spec.eyebrow} title={spec.title} action={(
         <div className="panel-actions">
+          {variant === "thermal" && staticCloudUrl && (
+            <div className="thermal-demo-presets" aria-label="열화상 데모 상태">
+              {Object.entries(thermalDemoPresets).map(([id, preset]) => (
+                <button key={id} type="button" className={thermalPreset === id ? "active" : ""} aria-pressed={thermalPreset === id} onClick={() => onThermalPresetChange?.(id)}>{preset.label}</button>
+              ))}
+            </div>
+          )}
           <CurrentTime />
           <button type="button" className="icon-action" aria-label="3D 지도 화면 맞춤" title="3D 지도 화면 맞춤" onClick={() => fitRef.current()}>
             <Crosshair size={19} />
