@@ -233,6 +233,7 @@ export default function MapPanel({
   allowMockFallback = true,
 }) {
   const mapLive = Boolean(mediaStatus?.map?.available);
+  const staticMapSource = mediaStatus?.map?.static_url || null;
   const mapSpec = resolveMapSpec(mediaStatus, spatialState);
   const depthLegend = sensorLegend(spatialState, "depth");
   const thermalLegend = sensorLegend(spatialState, "thermal");
@@ -398,7 +399,15 @@ export default function MapPanel({
           >
             {(mapLive || allowMockFallback) && (
               <>
-                <LiveImage className={mapLive ? "live-map" : ""} draggable="false" endpoint="/api/v1/media/map" fallback={slamMap} enabled={mapLive} interval={1000} alt="ROS 2 SLAM 점유 지도" />
+                <LiveImage
+                  className={mapLive ? "live-map" : ""}
+                  draggable="false"
+                  endpoint="/api/v1/media/map"
+                  fallback={staticMapSource || slamMap}
+                  enabled={mapLive && !staticMapSource}
+                  interval={1000}
+                  alt="ROS 2 SLAM 점유 지도"
+                />
                 <SpatialMapOverlay
                   spatialState={spatialState}
                   mapSpec={mapSpec}
