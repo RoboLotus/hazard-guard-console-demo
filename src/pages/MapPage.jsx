@@ -18,6 +18,7 @@ import {
 } from "../components/Common.jsx";
 import MapPanel from "../components/MapPanel.jsx";
 import MapEquipmentPanel from "../components/MapEquipmentPanel.jsx";
+import DemoStatePanel from "../components/DemoStatePanel.jsx";
 import SimulationMapManager from "../components/SimulationMapManager.jsx";
 import WaypointMissionPanel from "../WaypointMissionPanel.jsx";
 import {
@@ -41,6 +42,7 @@ import {
 import {
   loadDemoDocument,
   recommendWaypointOrder,
+  resetDemoDocument,
   saveDemoDocument,
 } from "../demo/demoScenario.js";
 import { createEquipmentAt } from "../equipmentRoi.js";
@@ -78,7 +80,7 @@ export default function MapPage({
   const activeWorldId = systemMode?.active_world_id || "facility_map";
   const physicalTarget = systemMode?.deployment_target === "physical";
   const initialRoute = demoMode
-    ? { waypoints: loadDemoDocument().waypoints }
+    ? loadDemoDocument()
     : loadWaypointRoute(activeWorldId);
   const [waypoints, setWaypoints] = useState(() => initialRoute?.waypoints || []);
   const [patrolSchedule, setPatrolSchedule] = useState(
@@ -101,6 +103,9 @@ export default function MapPage({
   const [equipmentPointMode, setEquipmentPointMode] = useState(false);
   const [thermalPreset, setThermalPreset] = useState(() => (
     demoMode ? loadDemoDocument().thermalPreset : "normal"
+  ));
+  const [demoSavedAt, setDemoSavedAt] = useState(() => (
+    demoMode ? loadDemoDocument().savedAt : null
   ));
   const [routeBusy, setRouteBusy] = useState(false);
   const [layers, setLayers] = useState({
@@ -177,7 +182,7 @@ export default function MapPage({
 
   useEffect(() => {
     const route = demoMode
-      ? { waypoints: loadDemoDocument().waypoints }
+      ? loadDemoDocument()
       : loadWaypointRoute(activeWorldId);
     setWaypoints(route?.waypoints || []);
     setPatrolSchedule(normalizePatrolSchedule(route?.schedule));
@@ -349,11 +354,12 @@ export default function MapPage({
   const persistRoute = () => {
     if (demoMode) {
       const current = loadDemoDocument();
-      saveDemoDocument({
+      const saved = saveDemoDocument({
         ...current,
         waypoints,
         mapSignature: currentMapSignature,
       });
+      setDemoSavedAt(saved.savedAt);
       setSavedMapSignature(currentMapSignature);
       notify("웨이포인트를 이 브라우저에 저장했습니다.");
       return;
@@ -378,7 +384,8 @@ export default function MapPage({
     setSavedMapSignature(null);
     if (demoMode) {
       const current = loadDemoDocument();
-      saveDemoDocument({ ...current, waypoints: [], mapSignature: currentMapSignature });
+      const saved = saveDemoDocument({ ...current, waypoints: [], mapSignature: currentMapSignature });
+      setDemoSavedAt(saved.savedAt);
     } else {
       clearWaypointRoute(activeWorldId);
     }
@@ -508,6 +515,36 @@ export default function MapPage({
     }
   };
 
+  const saveCompleteDemo = () => {
+    const saved = saveDemoDocument({
+      ...loadDemoDocument(),
+      waypoints,
+      equipment,
+      thermalPreset,
+      mapSignature: currentMapSignature,
+    });
+    setSavedMapSignature(currentMapSignature);
+    setDemoSavedAt(saved.savedAt);
+    setEquipmentOptions(equipment.filter((item) => item.enabled));
+    notify("현재 데모 편집 상태를 브라우저에 저장했습니다.");
+  };
+
+  const restoreDemoSamples = () => {
+    const restored = resetDemoDocument();
+    setWaypoints(restored.waypoints);
+    setEquipment(restored.equipment);
+    setEquipmentOptions(restored.equipment.filter((item) => item.enabled));
+    setSelectedWaypointId(null);
+    setSelectedEquipmentId(restored.equipment[0]?.id || null);
+    setGoalMode(false);
+    setEquipmentPointMode(false);
+    setGoalCandidate(null);
+    setThermalPreset(restored.thermalPreset);
+    setSavedMapSignature(null);
+    setDemoSavedAt(null);
+    notify("최초 데모 샘플을 복원했습니다.", "info");
+  };
+
   return (
     <div className="detail-page map-page">
       <DetailHeading eyebrow="DIGITAL TWIN" title="지도 관제" description="2D 점유 지도, RTAB-Map RGB-D 컬러 포인트클라우드, 캘리브레이션으로 온도를 입힌 열화상 3D 지도를 전환해 확인합니다.">
@@ -560,7 +597,11 @@ export default function MapPage({
               equipment={equipment}
               selectedEquipmentId={selectedEquipmentId}
               thermalPreset={thermalPreset}
-              onThermalPresetChange={setThermalPreset}
+              onThermalPresetChange={(preset) => {
+                setThermalPreset(preset);
+                const saved = saveDemoDocument({ ...loadDemoDocument(), thermalPreset: preset });
+                setDemoSavedAt(saved.savedAt);
+              }}
             />
           </Suspense>
         )}
@@ -588,12 +629,20 @@ export default function MapPage({
             onOpen3d={() => setMapDimension("3d")}
             onSave={async (nextEquipment) => {
               const current = loadDemoDocument();
-              saveDemoDocument({ ...current, equipment: nextEquipment });
+              const saved = saveDemoDocument({ ...current, equipment: nextEquipment });
+              setDemoSavedAt(saved.savedAt);
               setEquipmentOptions(nextEquipment.filter((item) => item.enabled));
               notify("설비 위치와 ROI를 이 브라우저에 저장했습니다.");
             }}
             notify={notify}
           />
+          {demoMode && (
+            <DemoStatePanel
+              savedAt={demoSavedAt}
+              onSave={saveCompleteDemo}
+              onReset={restoreDemoSamples}
+            />
+          )}
           <WaypointMissionPanel
             waypoints={waypoints}
             equipmentOptions={equipmentOptions}
