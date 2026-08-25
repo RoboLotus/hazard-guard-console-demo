@@ -193,7 +193,7 @@ export default function PointCloudPanel({
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x111a25);
-    scene.fog = new THREE.FogExp2(0x111a25, 0.025);
+    scene.fog = new THREE.FogExp2(0x111a25, staticCloudUrl ? 0.004 : 0.025);
     const camera = new THREE.PerspectiveCamera(48, 1, 0.01, 200);
     camera.up.set(0, 0, 1);
     camera.position.set(4.5, -5.5, 3.6);
@@ -209,7 +209,12 @@ export default function PointCloudPanel({
     controls.target.set(0, 0, 0.6);
     controls.update();
 
-    const grid = new THREE.GridHelper(12, 24, 0x315f8f, 0x273849);
+    const grid = new THREE.GridHelper(
+      staticCloudUrl ? 70 : 12,
+      staticCloudUrl ? 70 : 24,
+      0x315f8f,
+      0x273849,
+    );
     grid.rotation.x = Math.PI / 2;
     grid.material.opacity = 0.5;
     grid.material.transparent = true;
@@ -218,7 +223,7 @@ export default function PointCloudPanel({
 
     const geometry = new THREE.BufferGeometry();
     const material = new THREE.PointsMaterial({
-      size: 0.035,
+      size: staticCloudUrl ? 0.075 : 0.035,
       sizeAttenuation: true,
       vertexColors: true,
     });
@@ -511,7 +516,7 @@ export default function PointCloudPanel({
     || systemMode?.mapping_profile === "toolbox_rtabmap";
   const connectionLabel = archived || staticCloudUrl
     ? status.connection === "connected" && status.pointCount
-      ? "저장된 3D 세션"
+      ? staticCloudUrl ? "정적 real_factory" : "저장된 3D 세션"
       : status.connection === "connecting" ? "저장 지도 변환 중" : "저장 지도 오류"
     : ({
     connecting: "연결 중",
