@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { CheckCircle, Warning } from "@phosphor-icons/react";
-import { fallbackSpatialState } from "./spatial.js";
 import Sidebar from "./components/Sidebar.jsx";
 import { initialEvents, navigationLabels } from "./data/dashboardData.js";
+import {
+  demoMediaStatus,
+  demoSpatialState,
+  demoSystemMode,
+  demoTelemetry,
+} from "./demo/demoScenario.js";
 import EventsPage from "./pages/EventsPage.jsx";
 import HelpPage from "./pages/HelpPage.jsx";
 import MapPage from "./pages/MapPage.jsx";
@@ -10,29 +15,6 @@ import Overview from "./pages/Overview.jsx";
 import ReportsPage from "./pages/ReportsPage.jsx";
 import Settings from "./pages/Settings.jsx";
 import VideoPage from "./pages/VideoPage.jsx";
-
-const demoSystemMode = {
-  mode: "patrol",
-  state: "running",
-  control_enabled: false,
-  deployment_target: "simulation",
-  active_world_id: "facility_map",
-  map_available: true,
-  localization_pose: { x: -2.4, y: -2.55, yaw: 0.12 },
-};
-
-const demoTelemetry = {
-  battery: { percentage: 78, voltage: 11.9 },
-  network: { connected: true, signal: 82 },
-  lidar: { connected: true },
-  speed: { linear: 0.18 },
-};
-
-const demoMediaStatus = {
-  rgb: { available: false, source: "demo:static-image" },
-  thermal: { available: false, source: "demo:static-image" },
-  map: { available: false, source: "demo:static-map" },
-};
 
 export function App() {
   const [active, setActive] = useState("overview");
@@ -75,12 +57,12 @@ export function App() {
           <span>DEMO MODE</span>
           <p>정적 화면 예시입니다. 실제 로봇·서버·ROS와 연결되지 않습니다.</p>
         </div>
-        {active === "overview" && <Overview events={events} onAcknowledge={acknowledge} onNavigate={navigate} notify={notify} telemetry={demoTelemetry} mediaStatus={demoMediaStatus} spatialState={fallbackSpatialState} sendCommand={demoAction} />}
-        {active === "map" && <MapPage mediaStatus={demoMediaStatus} telemetry={demoTelemetry} spatialState={fallbackSpatialState} systemMode={demoSystemMode} modeBusy={false} onModeChange={demoAction} onInitializeLocalization={demoAction} onSystemModeUpdate={() => {}} onSaveSystemMap={demoAction} onSaveAndStop={demoAction} onStopSystemMode={demoAction} notify={notify} />}
+        {active === "overview" && <Overview events={events} onAcknowledge={acknowledge} onNavigate={navigate} notify={notify} telemetry={demoTelemetry} mediaStatus={demoMediaStatus} spatialState={demoSpatialState} sendCommand={demoAction} />}
+        {active === "map" && <MapPage mediaStatus={demoMediaStatus} telemetry={demoTelemetry} spatialState={demoSpatialState} systemMode={demoSystemMode} modeBusy={false} onModeChange={demoAction} onInitializeLocalization={demoAction} onSystemModeUpdate={() => {}} onSaveSystemMap={demoAction} onSaveAndStop={demoAction} onStopSystemMode={demoAction} notify={notify} demoMode />}
         {active === "events" && <EventsPage events={events} onUpdateStatus={updateEventStatus} notify={notify} onOpenVideo={() => navigate("video")} />}
         {active === "video" && <VideoPage mediaStatus={demoMediaStatus} telemetry={demoTelemetry} events={events} notify={notify} />}
         {active === "report" && <ReportsPage notify={notify} />}
-        {active === "settings" && <Settings notify={notify} apiOnline={false} spatialState={fallbackSpatialState} />}
+        {active === "settings" && <Settings notify={notify} apiOnline={false} spatialState={demoSpatialState} />}
         {active === "help" && <HelpPage onNavigate={navigate} />}
       </main>
       {toast && <div className={`toast ${toast.tone}`} role="status">{toast.tone === "warning" ? <Warning size={19} weight="fill" /> : <CheckCircle size={19} weight="fill" />}<span>{toast.message}</span></div>}
