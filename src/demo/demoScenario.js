@@ -153,3 +153,24 @@ export function resetDemoDocument() {
   localStorage.removeItem(DEMO_STORAGE_KEY);
   return createInitialDemoDocument();
 }
+
+export function recommendWaypointOrder(waypoints = []) {
+  const remaining = waypoints.filter((item) => item.enabled !== false);
+  const disabled = waypoints.filter((item) => item.enabled === false);
+  if (remaining.length < 2) return [...remaining, ...disabled];
+  const ordered = [remaining.shift()];
+  while (remaining.length) {
+    const previous = ordered.at(-1);
+    let nearestIndex = 0;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    remaining.forEach((candidate, index) => {
+      const distance = Math.hypot(candidate.x - previous.x, candidate.y - previous.y);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+    ordered.push(remaining.splice(nearestIndex, 1)[0]);
+  }
+  return [...ordered, ...disabled];
+}

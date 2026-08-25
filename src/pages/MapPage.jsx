@@ -37,6 +37,11 @@ import {
   buildPatrolSchedulePayload,
   normalizePatrolSchedule,
 } from "../patrolSchedule.js";
+import {
+  loadDemoDocument,
+  recommendWaypointOrder,
+  saveDemoDocument,
+} from "../demo/demoScenario.js";
 
 const PointCloudPanel = lazy(() => import("../components/PointCloudPanel.jsx"));
 
@@ -61,6 +66,7 @@ export default function MapPage({
   onSaveAndStop,
   onStopSystemMode,
   notify,
+  demoMode = false,
 }) {
   const [goalMode, setGoalMode] = useState(false);
   const [mapDimension, setMapDimension] = useState("2d");
@@ -68,7 +74,9 @@ export default function MapPage({
   const [goalCandidate, setGoalCandidate] = useState(null);
   const activeWorldId = systemMode?.active_world_id || "facility_map";
   const physicalTarget = systemMode?.deployment_target === "physical";
-  const initialRoute = loadWaypointRoute(activeWorldId);
+  const initialRoute = demoMode
+    ? { waypoints: loadDemoDocument().waypoints }
+    : loadWaypointRoute(activeWorldId);
   const [waypoints, setWaypoints] = useState(() => initialRoute?.waypoints || []);
   const [patrolSchedule, setPatrolSchedule] = useState(
     () => normalizePatrolSchedule(initialRoute?.schedule),
@@ -144,7 +152,9 @@ export default function MapPage({
   };
 
   useEffect(() => {
-    const route = loadWaypointRoute(activeWorldId);
+    const route = demoMode
+      ? { waypoints: loadDemoDocument().waypoints }
+      : loadWaypointRoute(activeWorldId);
     setWaypoints(route?.waypoints || []);
     setPatrolSchedule(normalizePatrolSchedule(route?.schedule));
     setSavedMapSignature(route?.mapSignature || null);
@@ -153,9 +163,10 @@ export default function MapPage({
     setGoalCandidate(null);
     setGoalMode(false);
     setSelected3dSession(null);
-  }, [activeWorldId]);
+  }, [activeWorldId, demoMode]);
 
   useEffect(() => {
+    if (demoMode) return undefined;
     const controller = new AbortController();
     const loadEquipment = async () => {
       try {
@@ -174,9 +185,13 @@ export default function MapPage({
     };
     void loadEquipment();
     return () => controller.abort();
-  }, []);
+  }, [demoMode]);
 
   useEffect(() => {
+    if (demoMode) {
+      setNavigationStatus({ status: "mock" });
+      return undefined;
+    }
     let disposed = false;
     const refresh = async () => {
       try {
@@ -189,9 +204,13 @@ export default function MapPage({
     void refresh();
     const interval = window.setInterval(refresh, 750);
     return () => { disposed = true; window.clearInterval(interval); };
-  }, []);
+  }, [demoMode]);
 
   useEffect(() => {
+    if (demoMode) {
+      setMissionStatus({ status: "idle", message: "정적 데모" });
+      return undefined;
+    }
     let disposed = false;
     const refreshMission = async () => {
       try {
@@ -204,7 +223,7 @@ export default function MapPage({
     void refreshMission();
     const interval = window.setInterval(refreshMission, 750);
     return () => { disposed = true; window.clearInterval(interval); };
-  }, []);
+  }, [demoMode]);
 
   const selectGoal = (candidate) => {
     if (repositionWaypointId) {
@@ -282,6 +301,17 @@ export default function MapPage({
   };
 
   const persistRoute = () => {
+    if (demoMode) {
+      const current = loadDemoDocument();
+      saveDemoDocument({
+        ...current,
+        waypoints,
+        mapSignature: currentMapSignature,
+      });
+      setSavedMapSignature(currentMapSignature);
+      notify("웨이포인트를 이 브라우저에 저장했습니다.");
+      return;
+    }
     saveWaypointRoute(
       waypoints,
       mapSpec,
@@ -300,13 +330,24 @@ export default function MapPage({
     setGoalMode(false);
     setRepositionWaypointId(null);
     setSavedMapSignature(null);
-    clearWaypointRoute(activeWorldId);
+    if (demoMode) {
+      const current = loadDemoDocument();
+      saveDemoDocument({ ...current, waypoints: [], mapSignature: currentMapSignature });
+    } else {
+      clearWaypointRoute(activeWorldId);
+    }
     notify("모든 웨이포인트를 삭제했습니다.", "info");
   };
 
   const recommendRoute = async () => {
     const enabled = activeWaypoints(waypoints);
     if (enabled.length < 2) return;
+    if (demoMode) {
+      setWaypoints(recommendWaypointOrder(waypoints));
+      setSavedMapSignature(null);
+      notify("직선거리 기준으로 가까운 웨이포인트 순서를 추천했습니다.", "info");
+      return;
+    }
     setRouteBusy(true);
     try {
       const response = await fetch("/api/v1/navigation/route/recommend", {
@@ -345,6 +386,10 @@ export default function MapPage({
   const startRoute = async () => {
     const enabled = activeWaypoints(waypoints);
     if (!enabled.length) return;
+    if (demoMode) {
+      notify("DEMO MODE에서는 경로를 편집할 수 있지만 실제 순찰은 시작하지 않습니다.", "warning");
+      return;
+    }
     if (!patrolModeReady) {
       notify(
         patrolModeSelected
@@ -383,6 +428,10 @@ export default function MapPage({
   };
 
   const cancelRoute = async () => {
+    if (demoMode) {
+      notify("DEMO MODE에서는 실행 중인 순찰 임무가 없습니다.", "info");
+      return;
+    }
     try {
       const response = await fetch("/api/v1/navigation/route", { method: "DELETE" });
       const result = await response.json();
